@@ -1,0 +1,232 @@
+#include  "prelab6_bsp.h"
+
+              MODULE HAL
+              PUBLIC SysConfig,PBs_handler,delay,Delay500msec,LCDsetup,Lcd_strobe,clr_lcd
+              PUBLIC start_adc_01,ADC10_ISR,ADC_config2,startCLK_A0,stopCLK_A0,TA0_ISR
+              EXTERN GPIOconfig,ADCconfig,state0,create_diff1_arr,create_diff2_arr,id_tri,func_state_1
+              EXTERN state,prntscrn_hz,DIV16,dec_converter,id_pwm
+;-----------------------------------------------------------------------------  
+;           LCD commands Macro
+;-----------------------------------------------------------------------------           
+Lcd_cmd       MACRO command
+              push  #delay15ms
+              call  #delay
+              mov.b command,LCDArrPort
+              call  #Lcd_strobe
+              ENDM    
+;-------------------------------------------------------------           
+;            LCD ascii data macro
+;-------------------------------------------------------------            
+Lcd_data     MACRO    char
+             push     #delay5ms
+             call     #delay
+             ;bic.b    #0xE0,LCDArrCont
+             mov.b    #0x00,LCDArrPort   ;0 -> DATABYTE
+             bis.b    #RS,LCDArrCont    ;RS=1
+             mov.b    char,LCDArrPort  ;CHAR -> DATABYTE
+             call     #Lcd_strobe
+             bic.b    #RS,LCDArrCont    ;RS=0
+             ENDM
+
+         
+              RSEG   CODE
+              
+              
+
+                        
+
+;----------------------------------------------------------------------------
+;             LCD SETUP
+;----------------------------------------------------------------------------
+LCDsetup     bic.b   0xE0, LCDArrCont             
+             push    #delay15ms
+             call    #delay
+             mov.b   #0x3f,LCDArrPort
+             call    #Lcd_strobe
+             push    #delay5ms
+             call    #delay
+             mov.b   #0x3f,LCDArrPort
+             call    #Lcd_strobe             
+             push    #delay200us
+             call    #delay
+             mov.b   #0x3f,LCDArrPort
+             call    #Lcd_strobe 
+             Lcd_cmd #0x3C
+             Lcd_cmd #0x0F
+             Lcd_cmd #0x01
+             Lcd_cmd #0x06
+             Lcd_cmd #0x80
+             Lcd_cmd #0x02
+             ;CLR.B   countSecO
+             ;CLR.B   countSecT
+             ;CLR.B   countMinO
+             ;clr.b   COMBINER
+             call  #clr_lcd
+             ret
+             
+;-------------------------------------------------------------           
+;             LCD strobe routine 
+;-------------------------------------------------------------
+Lcd_strobe   bis.b  #E,LCDArrCont
+             NOP
+             NOP
+             bic.b  #E,LCDArrCont
+             ret
+;-------------------------------------------------------------           
+;             clear lcd 
+;-------------------------------------------------------------
+clr_lcd      Lcd_cmd #0x01
+             ret
+                                
+;--------------------------------------------------------------------
+;             System Configuration  
+;--------------------------------------------------------------------
+SysConfig     call #GPIOconfig
+              ;call #TIMERconfig
+              call #ADCconfig
+              ret
+ 
+                
+;----------------------------------------------------------------------- 
+;            PORT2 Interrupt Service Routine
+;-----------------------------------------------------------------------
+PBs_handler  push.w #debounceVal
+             call   #delay
+             
+             bic.w   #ENC+ADC10SC,&ADC10CTL0
+             call   #stopCLK_A0
+
+             
+             bit.b  #PB0,PBsArrIntPend   ;check if PB0 is pushed
+             jnz    PB0sel 
+             bit.b  #PB1,PBsArrIntPend   ;check if PB1 is pushed
+             jnz    PB1sel
+             bit.b  #PB2,PBsArrIntPend   ;check if PB2 is pushed
+             jnz    PB2sel
+             bit.b  #PB3,PBsArrIntPend   ;check if PB3 is pushed
+             jnz    PB3sel
+             reti                ; interrupt hapened from another source
+             
+PB0sel       mov    #1,state 
+             mov    #PB0,R4     ; which IntPend to clear
+             jmp    exitLPM0
+PB1sel       mov    #2,state
+             mov    #PB1,R4     ; which IntPend to clear
+             jmp    exitLPM0
+PB2sel       mov    #3,state    ; idle state
+             mov    #PB2,R4     ; which IntPend to clear
+             jmp    exitLPM0
+             
+PB3sel       mov    #4,state
+             mov    #PB3,R4     ; which IntPend to clear
+             
+
+exitLPM0     bic    #CPUOFF+GIE,0(SP)  ; Exit LMP0, disable gie
+             bic.b  R4,PBsArrIntPend
+             
+            
+             bic.b    #10000000b,PBsArrPortout
+             pop    R7
+             POP    R8
+             PUSH.W #state0
+             PUSH.W R7
+             
+             reti
+;-------------------------------------------------------------------------------
+;ADC - CONFIG2
+;-------------------------------------------------------------------------------
+ADC_config2
+              mov.w   #INCH_3+ADC10DIV_0+CONSEQ_0+ADC10SSEL_3,&ADC10CTL1 ;
+              mov.w   #SREF_0+ADC10SHT_3+MSC+ADC10ON+ADC10IE,&ADC10CTL0 ;
+              mov.b   #0h,&ADC10DTC1
+             
+        
+              bis.b #0x08,&ADC10AE0
+              ret             
+;----------------------------------------------------------------------------------------------
+;            start_adc_01
+;----------------------------------------------------------------------------------------------                   
+start_adc_01:
+            bis.w   #ENC+ADC10SC,&ADC10CTL0 ; Start sampling
+            ret
+             
+             
+;----------------------------------------------------------------------------------------------
+;            ADC10_ISR
+;----------------------------------------------------------------------------------------------                    
+ADC10_ISR:
+
+          bic.w  #CPUOFF,0(SP)           ; Exit LPM0 on reti   
+          
+          reti
+          
+          
+          
+;-------------------------------------------------------------           
+;             set timer A0 
+;-------------------------------------------------------------
+startCLK_A0: 
+            bis  #TASSEL_2+ID_3+TAIE,&TACTL ;setup for state
+            bis  #MC_3,&TACTL
+            bis  #TAIE,&TACTL ;setup for state1
+            bis  #TACLR,&TACTL 
+            mov  #0xFFFF,TACCR0 
+            
+            ret
+            
+;-------------------------------------------------------------           
+;             stop timer A0 
+;-------------------------------------------------------------
+stopCLK_A0: 
+        
+          
+            bic #MC_1, &TACTL
+            bic #TAIE,&TACTL
+           
+            ret 
+            
+            
+;-------------------------------------------------------------------------------------------------------------------------------
+TA0_ISR: 
+;-------------------------------------------------------------------------------------------------------------------------------
+           add.w &TA0IV,PC ; Add Timer_ offset vector 
+           ;reti
+           ;jmp   TA_over
+           nop
+           ;call 
+           reti       ;ccIFG2
+           reti       ;reserved int.       
+           reti       ;reserved int.
+TA_over   inc r7
+           
+ reti ; Return from overflow ISR
+                      
+;----------------------------------------------------------------------------------------------
+;            Polling based Delay function
+;----------------------------------------------------------------------------------------------                     
+delay        pop   R15        ; save return address
+             pop   R5        ; get delay value
+             
+L            dec.w   R5      ;function body begin                 
+             jnz     L       ;function body end
+             
+             push.w  R15
+             ret
+             
+Delay500msec    pop     R4       ; save return address
+                mov.w   #6,R14              
+L2              mov     #29115, R5
+L3              dec.w   R5      ;function body begin                 
+                jnz     L3      ;function body end 
+                dec     R14
+                jnz     L2
+                push    R4       ; push return address
+                ret                  
+         
+
+ 
+           ENDMOD
+           END     
+
+
+ 

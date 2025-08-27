@@ -1,0 +1,102 @@
+#include  "prelab6_bsp.h"
+
+             NAME   MAIN
+             PUBLIC state,main,state0
+             EXTERN SysConfig,delay,prntscrn_hz,prntscrn_shape,func_state_1
+             EXTERN Lcd_strobe,LCDsetup,start_adc_01,prntscrn_shape_head,avg_v,prntscrn_voltage_head,ADCconfig,startCLK_A0
+             PUBLIC thounsands10,thounsands,hundreds,tens ,ones ,hexnum,diff_arr_1,diff_arr_2,sqr_num,tri_num
+             PUBLIC whole,partial,residue,quotient,duplex,first_num
+;----------------------------------------------------------------------------------
+             ORG      DataSegStart         ; Begins a DATA segment
+             
+state        DW   0                        ; state variable
+
+thounsands10 dw 48
+thounsands   dw 48
+hundreds     dw 48
+tens         dw 48
+ones         dw 48
+hexnum       dw 0
+diff_arr_1   ds16 32
+diff_arr_2   ds16 32
+sqr_num      dw  0
+tri_num      dw  0
+whole         DW      0
+partial       DW      0
+quotient      DW      0
+residue       DW      0
+duplex        DL      0
+first_num     DW      0
+
+;-------------------------------------------------------------------------------------          
+             ;RSEG    CSTACK    ; shows to compiler where is the RAM populating limit
+                                ; can be ignored
+;-------------------------------------------------------------------------------------
+             ORG     CodeSegStart       ; Program Reset = Begins a CODE segment
+             
+main         mov.w   #StackTosStart,SP  ; Initialize stack pointer to the RAM end 
+             call    #SysConfig
+             call    #LCDsetup
+             clr     state              ; set to idle state at the beginning
+;---------------------- FSM_loop -------------------------------------
+state0       cmp     #0x00,state         ;check if state0           
+             jnz     state1
+             bis.w   #CPUOFF+GIE,SR 
+
+state1        cmp     #0x01,state         ;check if state1
+              jnz     state2  
+              eint
+              CALL    #ADCconfig
+              
+              call    #prntscrn_shape_head
+              push    #debounceVal
+              call    #delay
+              
+              mov.w   #0300h,&ADC10SA 
+              call    #start_adc_01
+              ;bis.w   #CPUOFF+GIE,SR
+               
+                     ; Data buffer start
+qwe          call    #func_state_1
+             mov.w   #0300h,&ADC10SA 
+             call    #start_adc_01
+             bis.w   #CPUOFF+GIE,SR
+            ;call    #start_adc_01
+             nop
+             jmp qwe
+  
+            
+state2       cmp     #0x02,state         ;check if state2
+             jnz     state3 
+             eint
+             call #prntscrn_voltage_head
+edf          call #avg_v
+             jmp edf
+             
+             
+
+             
+             bis.w   #CPUOFF+GIE,SR
+
+state3       cmp     #0x03,state         ;check if state3
+             jnz     state0 
+             eint
+             call #startCLK_A0
+             ;call #start_adc_3
+             
+ghj          bis.w   #CPUOFF+GIE,SR
+             ;inc R7
+             jmp ghj
+             
+             
+             
+             
+;state4       cmp     #0x04,state         ;check if state3
+             ;jnz     state0 
+             ;call    #DT_alt            ;infinite function             
+            
+
+             jmp     state0       
+                 
+             END
+               

@@ -1,0 +1,671 @@
+#include  "prelab6_bsp.h"
+
+             MODULE API
+             PUBLIC prntscrn_shape_head,prntscrn_shape,avg_v
+             EXTERN Delay500msec ,state,delay,Lcd_strobe,clr_lcd
+             EXTERN diff_arr_2,diff_arr_1,sqr_num,tri_num
+             PUBLIC prntscrn_shape,DIV16,dec_converter,create_diff1_arr,id_pwm,create_diff2_arr,id_tri,func_state_1,prntscrn_voltage_head
+             EXTERN thounsands10,thounsands,hundreds,tens,ones,hexnum
+             EXTERN whole,partial,residue,quotient,ADC_config2,duplex,first_num,,startCLK_A0,stopCLK_A0
+             
+;-----------------------------------------------------------------------------  
+;           LCD commands Macro
+;-----------------------------------------------------------------------------           
+Lcd_cmd      MACRO command
+             push  #delay5ms
+             call  #delay
+             mov.b command,LCDArrPort     ;COMM -> DATABYTE
+             call  #Lcd_strobe
+             ENDM    
+                       
+;-------------------------------------------------------------           
+;            LCD ascii data macro
+;-------------------------------------------------------------            
+Lcd_data     MACRO    char
+             push     #delay5ms
+             call     #delay
+             mov.b    #0x00,LCDArrPort   ;0 -> DATABYTE
+             bis.b    #RS,LCDArrCont    ;RS=1
+             push     #delay5ms
+             call     #delay
+             mov.b    char,LCDArrPort  ;CHAR -> DATABYTE
+             call     #Lcd_strobe
+             bic.b    #RS,LCDArrCont    ;RS=0
+             ENDM
+
+             RSEG   CODE
+ ;------------------------------------------------------------- 
+;            create diff array
+;-------------------------------------------------------------
+create_diff1_arr:
+                pop r5 ;ret addr
+                mov #300h, r8
+                mov #diff_arr_1, r6 
+                mov #0, r9
+                
+                
+                
+create_loop     cmp #340h, r8
+                jz finish_create_arr
+                mov.w @r8+, r7
+                mov.w @r8,r9
+                sub R9,R7
+                mov.w R7, 0(r6)
+                INCD R6
+                jmp create_loop
+finish_create_arr:
+                push r5
+                ret
+ ;------------------------------------------------------------- 
+;            create diff array_2
+;-------------------------------------------------------------
+create_diff2_arr:
+                pop r5 ;ret addr
+                mov #diff_arr_1, r8
+                mov #diff_arr_2, r6 
+                mov #0, r9
+                
+                mov r8,r10
+                add #0x3E ,r10
+                
+create_loop2     cmp r10, r8
+                jz finish_create_arr2
+                mov.w @r8+, r7
+                mov.w @r8,r9
+                sub R9,R7
+                mov.w R7, 0(r6)
+                INCD R6
+                jmp create_loop2
+finish_create_arr2:
+                push r5
+                ret                
+ ;------------------------------------------------------------- 
+;            identify_pwm
+;-------------------------------------------------------------                
+ id_pwm:
+        
+        pop r5
+        clr r6
+        mov #31 ,r8
+        mov #diff_arr_1, r7
+cc      cmp #0, r8
+        jz  finish_idpwm
+        mov 0(r7),r9
+        cmp #0, r9
+        jn neg
+     
+        cmp #4, r9
+        jl  bb
+        jmp gg
+        
+neg     cmp #0xFFFC, r9
+        jge bb
+gg      dec r8
+        incd r7
+        jmp cc
+        
+bb      inc r6
+        dec r8
+        incd r7
+        jmp cc
+        
+finish_idpwm:
+         mov r6, sqr_num
+         push r5
+         ret
+ 
+ 
+ 
+ 
+ ;------------------------------------------------------------- 
+;            identify_triangle
+;-------------------------------------------------------------                
+ id_tri:
+        
+        pop r5
+        clr r6
+        mov #30 ,r8
+        mov #diff_arr_2, r7
+cc1      cmp #0, r8
+        jz  finish_idtri
+        mov 0(r7),r9
+        cmp #0, r9
+        jn neg1
+     
+        cmp #5 ,R9
+        jl  bb1
+        jmp gg1
+        
+neg1     cmp #0xFFFC, r9
+        jge bb1
+gg1      dec r8
+        incd r7
+        jmp cc1
+        
+bb1      inc r6
+        dec r8
+        incd r7
+        jmp cc1
+        
+finish_idtri:
+         mov r6, tri_num
+         push r5
+         ret
+  
+ 
+;------------------------------------------------------------- 
+;            state_1
+;------------------------------------------------------------- 
+func_state_1:
+
+          pop r11
+
+          call #create_diff1_arr
+          call #id_pwm
+          mov  sqr_num, r4
+          cmp  #16, r4
+          jge  its_pwm
+          
+          call #create_diff2_arr
+          call #id_tri
+          mov  tri_num, r4
+          cmp  #5, r4
+          jge  its_tri
+          
+         
+its_sin    push  #3
+           call  #prntscrn_shape
+           push r11
+           
+           ret   
+          
+its_pwm    push  #1
+           call  #prntscrn_shape
+           push r11
+           
+           ret
+           
+its_tri    push  #2
+           call  #prntscrn_shape
+           push r11
+           
+           ret
+
+
+
+
+
+ 
+;------------------------------------------------------------- 
+;            print screen shape head
+;-------------------------------------------------------------
+
+prntscrn_shape_head:           
+          
+
+      
+          ;Lcd_cmd   #0xc0
+          ;Lcd_cmd   #0xc0
+          Lcd_cmd   #0x01
+          
+          Lcd_cmd   #0x02
+          Lcd_cmd   #0x0C
+          Lcd_cmd   #0x0F
+          
+          Lcd_data  #83
+          Lcd_data  #105
+          Lcd_data  #103
+          Lcd_data  #110
+          Lcd_data  #97
+          Lcd_data  #108
+          Lcd_data  #32  ;---
+          Lcd_data  #115
+          Lcd_data  #104
+          Lcd_data  #97
+          Lcd_data  #112
+          Lcd_data  #101
+          Lcd_data  #58
+          
+        
+          ret 
+ 
+ 
+;------------------------------------------------------------- 
+;            print screen shape
+;-------------------------------------------------------------
+
+prntscrn_shape:           
+          
+          pop r9     ;ret addr
+          pop r6     ;1=pwm ,2= tri , 3= sin
+          
+          cmp #1, r6
+          jz print_pwm
+          cmp #2, r6
+          jz print_tri
+           
+print_sin:
+          
+          Lcd_cmd   #0x02
+          Lcd_cmd   #0xC0
+          Lcd_cmd   #0x0F
+          
+          Lcd_data  #83
+          Lcd_data  #105
+          Lcd_data  #110
+          Lcd_data  #101
+          Lcd_data  #32
+          Lcd_data  #32
+          Lcd_data  #32
+          Lcd_data  #32
+          
+
+          
+          push r9
+          ret
+
+print_pwm:
+          Lcd_cmd   #0x02
+          Lcd_cmd   #0xC0
+          Lcd_cmd   #0x0F
+          
+          Lcd_data  #80
+          Lcd_data  #87
+          Lcd_data  #77
+          Lcd_data  #32
+          Lcd_data  #32
+          Lcd_data  #32
+          Lcd_data  #32
+ 
+          
+      
+          push r9
+          ret
+
+
+print_tri:
+         
+      
+   
+          Lcd_cmd   #0x02
+          Lcd_cmd   #0xC0
+          Lcd_cmd   #0x0F
+          Lcd_data  #84
+          Lcd_data  #114
+          Lcd_data  #105
+          Lcd_data  #97
+          Lcd_data  #110
+          Lcd_data  #103
+          Lcd_data  #108
+          Lcd_data  #101
+          
+          push r9
+          ret
+;-------------------------------------------------------------           
+;            avg-voltage
+;-------------------------------------------------------------
+avg_v:
+     
+           ; pop r15  ;ret addr
+          
+            ;call    #ClrLCD
+            call    #ADC_config2
+            mov     #3600,R9
+            clr     R8
+            clr     R11
+            mov     #0,whole
+            mov     #0,partial
+            mov     #60,R6
+Mainloop    bis.w   #ENC+ADC10SC,ADC10CTL0
+            bis.w   #CPUOFF+GIE,SR          ; LPM0, ADC10_ISR will force exit
+            add     &ADC10MEM,R8
+            dec     R6
+            JNZ     M1
+            CALL    #Avg2
+M1          dec     R9
+            JNZ     Mainloop
+            CALL    #Avg
+            ;push  r15
+            RET
+
+Avg2        push   R8
+            push   #60
+            call   #DIV16
+            pop    r13   ;ren
+            pop    r12    ;whole
+            mov    whole, r4
+            mov    partial, r5
+            ADD    r12 ,r4
+            ADD    r13,r5
+            mov    r4 ,whole
+            mov    r5,partial
+            mov    #60,R6
+            clr    R8
+            RET
+            
+Avg         push   whole
+            push   #60
+            call   #DIV16
+            
+            pop    r13  ;rem
+            pop    r12  ;whole
+            mov    partial, r5
+            ADD    r13 ,r5
+            mov    r12 ,whole
+            mov    r5,partial
+            
+            push   partial
+            push   #3600
+            call   #DIV16
+            
+            pop    r13 ;rem
+            pop    r12 ;whole
+            mov    whole, r4
+            ADD    r12,r4
+            mov    r4 ,whole
+            mov    r13,partial
+            
+            ;DA
+            
+            rla r4
+            rla r4
+            rla r4
+            rla r4
+            
+           push   r4
+           push   #227     ;delta v
+           call   #APmult
+           MOV    #duplex, R10
+           POP    0(R10);weak
+           POP    2(R10);strong
+           
+           call #number_process
+            
+            
+            ret
+
+;---------------------------------------------------------------
+;             Tai_Strong_weak_Yoni_Yaniv_King :)
+;---------------------------------------------------------------
+number_process:
+            
+            mov 2(R10), R9
+            and #0x00F0, R9
+            mov 2(R10), R7
+            AND.W #0x000F, R7
+            
+            mov #12,R6
+rot12       RLA R7
+            dec R6
+            jnz rot12
+
+            RRA R9
+            RRA R9
+            RRA R9
+            RRA R9
+;Strong part of volage number (before .)
+           
+            add #48,R9
+            mov R9, first_num
+            
+            mov partial, R9
+            
+            mov 0(R10), R8
+            RRA R8
+            RRA R8
+            RRA R8
+            RRA R8
+            
+            RRA R9
+            ;RRA R9
+            ;RRA R9
+            ;RRA R9
+            add R9,R8
+            
+            add.w R7,R8 ;weak part
+            
+            push   r8
+            push   #100
+            call   #DIV16
+            
+            pop    r13  ;rem
+            pop    r8  ;whole
+            
+            rla r8
+            rla r8
+            rla r8
+            rla r8
+            
+            push r8
+            call #dec_converter
+            call #prntscrn_v
+            
+            ret
+            
+            
+            
+            
+            
+
+;------------------------------------------------------------- 
+;            print screen voltage
+;-------------------------------------------------------------
+
+prntscrn_v:           
+           
+           
+          ;Lcd_cmd   #0xc0
+          ;Lcd_cmd   #0xc0
+          ;Lcd_cmd   #0x01
+          Lcd_cmd   #0x02
+          
+          Lcd_cmd   #0x14
+          Lcd_cmd   #0x14
+          Lcd_cmd   #0x14
+          Lcd_cmd   #0x14
+          Lcd_cmd   #0x14
+          
+          Lcd_cmd   #0x0F
+          Lcd_data  first_num
+          Lcd_data  #46
+          ;Lcd_data  thounsands10
+          ;INCD      thounsands  ; ------???
+          ;INC       thounsands  ; ------???
+          Lcd_data  thounsands
+          Lcd_data  hundreds
+          Lcd_data  tens 
+          ;Lcd_data  ones
+          Lcd_data  #91
+          Lcd_data  #86
+          Lcd_data  #93
+          ret
+;------------------------------------------------------------- 
+;            print screen voltage head
+;-------------------------------------------------------------
+
+prntscrn_voltage_head:           
+          
+
+      
+          ;Lcd_cmd   #0xc0
+          ;Lcd_cmd   #0xc0
+          ;Lcd_cmd   #0x01
+          Lcd_cmd   #0x01
+          Lcd_cmd   #0x02
+          Lcd_cmd   #0x0C
+          Lcd_cmd   #0x0F
+          
+          Lcd_data  #86
+          Lcd_data  #97
+          Lcd_data  #118
+          Lcd_data  #103
+          Lcd_data  #61
+          
+          
+          ;Lcd_cmd   #0xc0
+          ;Lcd_data  #32
+          ;Lcd_data  #32
+          ;Lcd_data  #32
+          ;Lcd_data  #32
+          ;Lcd_data  #32
+          ;Lcd_data  #32
+          ;Lcd_data  #32
+          ;Lcd_data  #32
+          
+        
+          ret 
+ 
+;-------------------------------------------------------------------------------
+APmult    pop.w  R13                ; R13 = the caller return address
+	  pop.w  R10                 ; R10=op2 value
+	  pop.w  R9                 ; R10=op1 value					
+	  mov    #16,R15            ; counter for 16 bits length
+          clr    R11                 ; clear res low
+          clr    R12                 ; clear res high
+          clr    R14                 ; aux. register for R10 to shift left of operand R10 into 32 bit 
+AP_L1     rrc    R9
+          jnc    AP_L2                 ; current bit equal zero
+          add    R10,R11              ; current bit equal one
+          adc    R12
+          add    R14,R12
+AP_L2     rla    R10
+          rlc    R14
+          dec    R15
+          jnz    AP_L1
+	  push.w R12		    ; push to stack the multiplication High word
+	  push.w R11		    ; push to stack the multiplication Low word
+	  push.w R13		    ; push back the caller return address
+          ret 
+;-------------------------------------------------------------------------------
+
+;-------------------------------------------------------------           
+;            division - DIV16	
+;-------------------------------------------------------------
+DIV16	  	pop.w R15			; R15 = the caller return address
+		pop.w R14			; R14 = y = Divisor
+		pop.w R13			; R13 = x = Dividend	                 
+                mov     #17,R10			; R10=DIV16_STEP_COUNTER=16+1
+                clr     R12                	; initialize the Quotient register
+                clr     R11		   	; initialize the shift-register {|R11|R13|} Upper Word                 
+DIVL3           rla     R12
+DIVL1           dec     R10
+                jz      DIVL2
+                rla     R13
+                rlc     R11
+                cmp     R14,R11
+                jlo     DIVL3
+                sub     R14,R11
+                setc
+                rlc     R12
+                jmp     DIVL1               
+DIVL2           push.w   R12		   	; push the Quotient into stack
+                push.w   R11		   	; push the Remainder into stack
+		push.w   R15			; push back the caller return address
+                ret	
+
+
+;------------------------------------------------------------- 
+
+
+;------------------------------------------------------------- 
+;            state_3
+;------------------------------------------------------------- 
+func_state_3:
+
+          
+          call #startCLK_A0
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          ;call #stopCLK_A0
+
+
+
+
+
+
+
+
+
+
+
+;------------------------------------------------------------
+          ;;;;;hex_to_dec_convertor func;;;;;;;;
+;all the digits are set to 48, which is the value of 0 in ascii;
+ ;------------------------------------------------------------ 
+                        
+                        
+dec_converter           pop R8     ;pc                   
+                        pop hexnum ;our number that we want to convert 
+                        mov.w   #48, thounsands10     ;reseting all the values
+                        mov.w   #48, thounsands  
+                        mov.w   #48, hundreds   
+                        mov.w   #48, tens        
+                        mov.w   #48, ones
+                        
+                        
+thounsands10_check      push.w #10000
+                        push.w hexnum
+                        call #dec_count
+                        pop hexnum
+                        pop R5
+                        add R5, thounsands10
+
+thounsands_check        push #1000
+                        push hexnum
+                        call #dec_count
+                        pop hexnum
+                        pop R5
+                        add R5, thounsands
+                        
+                        
+hundreds_check          push #100
+                        push hexnum
+                        call #dec_count
+                        pop hexnum
+                        pop R5
+                        add R5, hundreds
+
+tens_check              push #10
+                        push hexnum
+                        call #dec_count
+                        pop hexnum
+                        pop R5
+                        add R5, tens
+                        
+                        
+ones_transfer           add.w hexnum, ones
+                        push R8 ;pushing back the pc
+                        ret
+                        
+
+
+dec_count               pop R10  ;PC
+                        pop R11  ;our number
+                        pop R12  ;size of value we count
+                        clr R9
+going_back              cmp.w R12, R11
+                        JN end_loop
+                        SUB.W R12, R11
+                        inc R9
+                        jmp going_back
+end_loop                push R9     ;the divide result with complete value
+                        push R11    ;the remainder
+                        push R10    ;PC
+                        ret
+  
+
+
+
+
+
+           
+           
+             ENDMOD    
+             END
