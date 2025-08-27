@@ -1,4 +1,4 @@
-MSP430G2553 – Lab 6 (Assembly) — README
+MSP430G2553 – Analog to digital — README
 
 Short Summary
 ------------
