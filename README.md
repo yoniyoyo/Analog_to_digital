@@ -33,8 +33,6 @@ Target Hardware
 ---------------
 • MCU: MSP430G2553 
 • Buttons / LCD: connected to the ports as defined in prelab6_bsp.h.
-• Function generator (optional), within 0–VCC input range, if you want to feed an analog signal
-  for the ADC demonstration.
 
 How to Build & Flash (IDE Only)
 -------------------------------
